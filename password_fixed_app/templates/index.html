@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}首页 - 用户管理系统{% endblock %}
+
+{% block content %}
+<section class="card">
+    {% if user %}
+        <h1 class="card-title">欢迎回来，{{ user.username }}！</h1>
+        <ul class="user-list">
+            <li class="user-item"><span class="item-label">用户名：</span>{{ user.username }}</li>
+            <li class="user-item"><span class="item-label">邮箱：</span>{{ user.email }}</li>
+            <li class="user-item"><span class="item-label">手机：</span>{{ user.phone }}</li>
+            <li class="user-item"><span class="item-label">角色：</span>{{ user.role }}</li>
+            <li class="user-item"><span class="item-label">余额：</span>{{ user.balance }}</li>
+        </ul>
+        <a class="button" href="/logout">退出登录</a>
+    {% else %}
+        <h1 class="card-title">请先登录</h1>
+        <a class="button" href="/login">前往登录</a>
+    {% endif %}
+</section>
+{% endblock %}

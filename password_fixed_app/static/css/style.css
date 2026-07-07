@@ -1,0 +1,134 @@
+.page {
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    background: #f4f6fb;
+    color: #333;
+    font-family: Arial, "Microsoft YaHei", sans-serif;
+    box-sizing: border-box;
+}
+
+.page * {
+    margin: 0;
+    padding: 0;
+    box-sizing: inherit;
+}
+
+.navbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 8%;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: #fff;
+}
+
+.brand,
+.nav-link {
+    color: #fff;
+    text-decoration: none;
+}
+
+.brand {
+    font-size: 22px;
+    font-weight: bold;
+}
+
+.nav-menu {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+}
+
+.nav-text,
+.nav-link {
+    font-size: 15px;
+}
+
+.main-container {
+    width: min(90%, 720px);
+    margin: 48px auto;
+}
+
+.card {
+    padding: 30px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(37, 48, 83, 0.12);
+}
+
+.login-card {
+    max-width: 420px;
+    margin: 0 auto;
+}
+
+.card-title {
+    margin-bottom: 24px;
+    color: #333;
+    font-size: 26px;
+}
+
+.login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.form-label {
+    font-weight: bold;
+}
+
+.form-input {
+    width: 100%;
+    padding: 11px 12px;
+    border: 1px solid #ccd2df;
+    border-radius: 6px;
+    font-size: 16px;
+}
+
+.button {
+    display: inline-block;
+    padding: 10px 18px;
+    border: 0;
+    border-radius: 6px;
+    background: #667eea;
+    color: #fff;
+    font-size: 15px;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.form-button {
+    width: 100%;
+}
+
+.error-message {
+    margin-bottom: 18px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    background: #ffe8e8;
+    color: #c0392b;
+}
+
+.user-list {
+    margin-bottom: 24px;
+    list-style: none;
+}
+
+.user-item {
+    padding: 11px 0;
+    border-bottom: 1px solid #edf0f5;
+}
+
+.item-label {
+    display: inline-block;
+    width: 90px;
+    font-weight: bold;
+}
