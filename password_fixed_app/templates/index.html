@@ -13,6 +13,42 @@
             <li class="user-item"><span class="item-label">角色：</span>{{ user.role }}</li>
             <li class="user-item"><span class="item-label">余额：</span>{{ user.balance }}</li>
         </ul>
+
+        <section class="search-section">
+            <h2 class="section-title">搜索用户</h2>
+            <form class="search-form" method="get" action="/search">
+                <input class="form-input search-input" name="keyword" type="text" value="{{ keyword or '' }}" placeholder="输入用户名或邮箱">
+                <button class="button search-button" type="submit">搜索</button>
+            </form>
+
+            {% if results %}
+                <div class="table-wrapper">
+                    <table class="result-table">
+                        <thead class="table-head">
+                            <tr class="table-row">
+                                <th class="table-cell">ID</th>
+                                <th class="table-cell">用户名</th>
+                                <th class="table-cell">邮箱</th>
+                                <th class="table-cell">手机</th>
+                            </tr>
+                        </thead>
+                        <tbody class="table-body">
+                            {% for result in results %}
+                                <tr class="table-row">
+                                    <td class="table-cell">{{ result.id }}</td>
+                                    <td class="table-cell">{{ result.username }}</td>
+                                    <td class="table-cell">{{ result.email }}</td>
+                                    <td class="table-cell">{{ result.phone }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% elif keyword is defined and keyword %}
+                <p class="empty-message">无搜索结果</p>
+            {% endif %}
+        </section>
+
         <a class="button" href="/logout">退出登录</a>
     {% else %}
         <h1 class="card-title">请先登录</h1>

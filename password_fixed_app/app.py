@@ -1,9 +1,15 @@
+import sqlite3, os
+
 from flask import Flask, render_template, request, redirect, session
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 
 
 app = Flask(__name__)
 app.secret_key = "dev-key-2025"
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+DB_PATH = os.path.join(DATA_DIR, "users.db")
 
 USERS = {
     "admin": {
@@ -21,6 +27,57 @@ USERS = {
         "balance": 100,
     },
 }
+
+
+def init_db():
+    os.makedirs(DATA_DIR, exist_ok=True)
+    connection = sqlite3.connect(DB_PATH)
+    cursor = connection.cursor()
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE,
+            password TEXT,
+            email TEXT,
+            phone TEXT
+        )
+        """
+    )
+    cursor.execute(
+        """
+        INSERT OR IGNORE INTO users (username, password, email, phone)
+        VALUES (?, ?, ?, ?)
+        """,
+        (
+            "admin",
+            USERS["admin"]["password_hash"],
+            "admin@example.com",
+            "13800138000",
+        ),
+    )
+    cursor.execute(
+        """
+        INSERT OR IGNORE INTO users (username, password, email, phone)
+        VALUES (?, ?, ?, ?)
+        """,
+        (
+            "alice",
+            USERS["alice"]["password_hash"],
+            "alice@example.com",
+            "13900139001",
+        ),
+    )
+
+    users = cursor.execute("SELECT id, password FROM users").fetchall()
+    for user_id, stored_password in users:
+        if not stored_password.startswith(("scrypt:", "pbkdf2:")):
+            cursor.execute(
+                "UPDATE users SET password = ? WHERE id = ?",
+                (generate_password_hash(stored_password), user_id),
+            )
+    connection.commit()
+    connection.close()
 
 
 def public_user_info(username):
@@ -55,7 +112,67 @@ def login():
 
         return render_template("login.html", error="用户名或密码错误")
 
-    return render_template("login.html")
+    return render_template("login.html", message=request.args.get("message"))
+
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        username = request.form.get("username", "")
+        password = request.form.get("password", "")
+        email = request.form.get("email", "")
+        phone = request.form.get("phone", "")
+
+        sql = """
+            INSERT INTO users (username, password, email, phone)
+            VALUES (?, ?, ?, ?)
+        """
+        password_hash = generate_password_hash(password)
+        connection = sqlite3.connect(DB_PATH)
+        try:
+            connection.execute(sql, (username, password_hash, email, phone))
+            connection.commit()
+        except sqlite3.IntegrityError:
+            connection.close()
+            return render_template("register.html", error="用户名已存在")
+        except sqlite3.Error:
+            connection.close()
+            return render_template("register.html", error="注册失败，请稍后重试")
+        connection.close()
+        return redirect("/login?message=注册成功，请登录")
+
+    return render_template("register.html")
+
+
+@app.route("/search")
+def search():
+    username = session.get("username")
+    user = public_user_info(username)
+    if not user:
+        return redirect("/login")
+
+    keyword = request.args.get("keyword", "")
+    sql = """
+        SELECT id, username, email, phone
+        FROM users
+        WHERE username LIKE ? OR email LIKE ?
+    """
+    search_pattern = f"%{keyword}%"
+
+    connection = sqlite3.connect(DB_PATH)
+    connection.row_factory = sqlite3.Row
+    results = connection.execute(
+        sql,
+        (search_pattern, search_pattern),
+    ).fetchall()
+    connection.close()
+
+    return render_template(
+        "index.html",
+        user=user,
+        keyword=keyword,
+        results=results,
+    )
 
 
 @app.route("/logout")
@@ -65,4 +182,5 @@ def logout():
 
 
 if __name__ == "__main__":
+    init_db()
     app.run(host="0.0.0.0", port=5001, debug=True)
