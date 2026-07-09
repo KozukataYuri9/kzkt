@@ -1,0 +1,17 @@
+.venv/
+.tools/
+__pycache__/
+*.py[cod]
+*.log
+*.zip
+*.msi
+gh_2.96.0_checksums.txt
+hackbar-v1.2.8/
+docx_qa/
+_docx_qa*/
+flask-service*.log
+gh-install.log
+password_fixed_app/data/users.db
+password_fixed_app/quarantine_uploads/
+password_fixed_app/static/uploads/*
+!password_fixed_app/static/uploads/.gitkeep

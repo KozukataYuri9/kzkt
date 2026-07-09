@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}首页 - 用户管理系统{% endblock %}
+
+{% block content %}
+<section class="card">
+    {% if user %}
+        <h1 class="card-title">欢迎回来，{{ user.username }}！</h1>
+        <ul class="user-list">
+            <li class="user-item"><span class="item-label">用户名：</span>{{ user.username }}</li>
+            <li class="user-item"><span class="item-label">邮箱：</span>{{ user.email }}</li>
+            <li class="user-item"><span class="item-label">手机：</span>{{ user.phone }}</li>
+            <li class="user-item"><span class="item-label">角色：</span>{{ user.role }}</li>
+            <li class="user-item"><span class="item-label">余额：</span>{{ user.balance }}</li>
+        </ul>
+
+        <div class="action-row">
+            <a class="button" href="/upload">上传头像</a>
+        </div>
+
+        <section class="search-section">
+            <h2 class="section-title">搜索用户</h2>
+            <form class="search-form" method="get" action="/search">
+                <input class="form-input search-input" name="keyword" type="text" value="{{ keyword or '' }}" placeholder="输入用户名或邮箱">
+                <button class="button search-button" type="submit">搜索</button>
+            </form>
+
+            {% if results %}
+                <div class="table-wrapper">
+                    <table class="result-table">
+                        <thead class="table-head">
+                            <tr class="table-row">
+                                <th class="table-cell">ID</th>
+                                <th class="table-cell">用户名</th>
+                                <th class="table-cell">邮箱</th>
+                                <th class="table-cell">手机</th>
+                            </tr>
+                        </thead>
+                        <tbody class="table-body">
+                            {% for result in results %}
+                                <tr class="table-row">
+                                    <td class="table-cell">{{ result.id }}</td>
+                                    <td class="table-cell">{{ result.username }}</td>
+                                    <td class="table-cell">{{ result.email }}</td>
+                                    <td class="table-cell">{{ result.phone }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% elif keyword is defined and keyword %}
+                <p class="empty-message">无搜索结果</p>
+            {% endif %}
+        </section>
+
+        <a class="button" href="/logout">退出登录</a>
+    {% else %}
+        <h1 class="card-title">请先登录</h1>
+        <a class="button" href="/login">前往登录</a>
+    {% endif %}
+</section>
+{% endblock %}
