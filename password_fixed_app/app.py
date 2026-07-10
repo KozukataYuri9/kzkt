@@ -1,8 +1,9 @@
 import os
 import sqlite3
 import uuid
+from decimal import Decimal, InvalidOperation
 
-from flask import Flask, render_template, request, redirect, session, url_for
+from flask import Flask, abort, render_template, request, redirect, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
@@ -15,6 +16,8 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 DB_PATH = os.path.join(DATA_DIR, "users.db")
 UPLOAD_DIR = os.path.join(BASE_DIR, "static", "uploads")
+MAX_RECHARGE_AMOUNT = Decimal("1000000.00")
+MONEY_QUANTUM = Decimal("0.01")
 
 ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
 ALLOWED_IMAGE_MIME_TYPES = {
@@ -42,10 +45,17 @@ USERS = {
 }
 
 
+def get_db_connection():
+    connection = sqlite3.connect(DB_PATH)
+    connection.row_factory = sqlite3.Row
+    return connection
+
+
 def init_db():
     os.makedirs(DATA_DIR, exist_ok=True)
     os.makedirs(UPLOAD_DIR, exist_ok=True)
-    connection = sqlite3.connect(DB_PATH)
+
+    connection = get_db_connection()
     cursor = connection.cursor()
     cursor.execute(
         """
@@ -54,56 +64,88 @@ def init_db():
             username TEXT UNIQUE,
             password TEXT,
             email TEXT,
-            phone TEXT
+            phone TEXT,
+            balance REAL DEFAULT 0
         )
         """
     )
+
+    columns = [row["name"] for row in cursor.execute("PRAGMA table_info(users)").fetchall()]
+    if "balance" not in columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN balance REAL DEFAULT 0")
+        cursor.execute(
+            "UPDATE users SET balance = ? WHERE username = ?",
+            (USERS["admin"]["balance"], "admin"),
+        )
+        cursor.execute(
+            "UPDATE users SET balance = ? WHERE username = ?",
+            (USERS["alice"]["balance"], "alice"),
+        )
+
     cursor.execute(
         """
-        INSERT OR IGNORE INTO users (username, password, email, phone)
-        VALUES (?, ?, ?, ?)
+        INSERT OR IGNORE INTO users (username, password, email, phone, balance)
+        VALUES (?, ?, ?, ?, ?)
         """,
         (
             "admin",
             USERS["admin"]["password_hash"],
-            "admin@example.com",
-            "13800138000",
+            USERS["admin"]["email"],
+            USERS["admin"]["phone"],
+            USERS["admin"]["balance"],
         ),
     )
     cursor.execute(
         """
-        INSERT OR IGNORE INTO users (username, password, email, phone)
-        VALUES (?, ?, ?, ?)
+        INSERT OR IGNORE INTO users (username, password, email, phone, balance)
+        VALUES (?, ?, ?, ?, ?)
         """,
         (
             "alice",
             USERS["alice"]["password_hash"],
-            "alice@example.com",
-            "13900139001",
+            USERS["alice"]["email"],
+            USERS["alice"]["phone"],
+            USERS["alice"]["balance"],
         ),
     )
 
     users = cursor.execute("SELECT id, password FROM users").fetchall()
-    for user_id, stored_password in users:
-        if not stored_password.startswith(("scrypt:", "pbkdf2:")):
+    for user in users:
+        stored_password = user["password"]
+        if stored_password and not stored_password.startswith(("scrypt:", "pbkdf2:")):
             cursor.execute(
                 "UPDATE users SET password = ? WHERE id = ?",
-                (generate_password_hash(stored_password), user_id),
+                (generate_password_hash(stored_password), user["id"]),
             )
+
     connection.commit()
     connection.close()
 
 
+def get_user_by_username(username):
+    if not username:
+        return None
+    connection = get_db_connection()
+    user = connection.execute(
+        "SELECT id, username, email, phone, balance FROM users WHERE username = ?",
+        (username,),
+    ).fetchone()
+    connection.close()
+    return user
+
+
 def public_user_info(username):
     user = USERS.get(username)
-    if not user:
+    db_user = get_user_by_username(username)
+    if not user or not db_user:
         return None
     return {
+        "id": db_user["id"],
         "username": username,
         "role": user["role"],
-        "email": user["email"],
-        "phone": user["phone"],
-        "balance": user["balance"],
+        "email": db_user["email"],
+        "phone": db_user["phone"],
+        "balance": db_user["balance"],
     }
 
 
@@ -173,14 +215,16 @@ def register():
         email = request.form.get("email", "")
         phone = request.form.get("phone", "")
 
-        sql = """
-            INSERT INTO users (username, password, email, phone)
-            VALUES (?, ?, ?, ?)
-        """
         password_hash = generate_password_hash(password)
-        connection = sqlite3.connect(DB_PATH)
+        connection = get_db_connection()
         try:
-            connection.execute(sql, (username, password_hash, email, phone))
+            connection.execute(
+                """
+                INSERT INTO users (username, password, email, phone, balance)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (username, password_hash, email, phone, 0),
+            )
             connection.commit()
         except sqlite3.IntegrityError:
             connection.close()
@@ -209,12 +253,8 @@ def search():
     """
     search_pattern = f"%{keyword}%"
 
-    connection = sqlite3.connect(DB_PATH)
-    connection.row_factory = sqlite3.Row
-    results = connection.execute(
-        sql,
-        (search_pattern, search_pattern),
-    ).fetchall()
+    connection = get_db_connection()
+    results = connection.execute(sql, (search_pattern, search_pattern)).fetchall()
     connection.close()
 
     return render_template(
@@ -251,6 +291,77 @@ def upload():
         )
 
     return render_template("upload.html")
+
+
+@app.route("/profile")
+def profile():
+    username = session.get("username")
+    if not username:
+        return redirect("/login")
+
+    profile_user = get_user_by_username(username)
+    if not profile_user:
+        session.clear()
+        return redirect("/login")
+
+    requested_user_id = request.args.get("user_id")
+    if requested_user_id is not None:
+        try:
+            if int(requested_user_id) != profile_user["id"]:
+                abort(403)
+        except (TypeError, ValueError):
+            abort(403)
+
+    return render_template("profile.html", profile_user=profile_user)
+
+
+@app.route("/recharge", methods=["POST"])
+def recharge():
+    username = session.get("username")
+    if not username:
+        return redirect("/login")
+
+    current_user = get_user_by_username(username)
+    if not current_user:
+        session.clear()
+        return redirect("/login")
+
+    amount_text = request.form.get("amount", "").strip()
+    try:
+        amount = Decimal(amount_text)
+    except (InvalidOperation, ValueError):
+        amount = Decimal("NaN")
+
+    try:
+        has_valid_precision = amount.quantize(MONEY_QUANTUM) == amount
+    except InvalidOperation:
+        has_valid_precision = False
+
+    is_valid_amount = (
+        amount.is_finite()
+        and amount > 0
+        and amount <= MAX_RECHARGE_AMOUNT
+        and has_valid_precision
+    )
+    if not is_valid_amount:
+        return (
+            render_template(
+                "profile.html",
+                profile_user=current_user,
+                error="充值金额必须大于 0、最多保留两位小数，且不能超过 1000000 元",
+            ),
+            400,
+        )
+
+    connection = get_db_connection()
+    connection.execute(
+        "UPDATE users SET balance = ROUND(balance + ?, 2) WHERE id = ?",
+        (float(amount), current_user["id"]),
+    )
+    connection.commit()
+    connection.close()
+
+    return redirect("/profile")
 
 
 @app.route("/logout")

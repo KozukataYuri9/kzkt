@@ -144,6 +144,9 @@
 }
 
 .action-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
     margin-bottom: 24px;
 }
 
@@ -175,6 +178,18 @@
 
 .search-button {
     flex: 0 0 auto;
+}
+
+.recharge-form {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.recharge-form .form-group {
+    flex: 1;
+    min-width: 220px;
 }
 
 .table-wrapper {

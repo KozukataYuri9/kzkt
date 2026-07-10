@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}个人中心 - 用户管理系统{% endblock %}
+
+{% block content %}
+<section class="card">
+    <h1 class="card-title">个人中心</h1>
+
+    {% if error %}
+        <div class="error-message">{{ error }}</div>
+    {% endif %}
+
+    {% if profile_user %}
+        <ul class="user-list">
+            <li class="user-item"><span class="item-label">ID：</span>{{ profile_user.id }}</li>
+            <li class="user-item"><span class="item-label">用户名：</span>{{ profile_user.username }}</li>
+            <li class="user-item"><span class="item-label">邮箱：</span>{{ profile_user.email }}</li>
+            <li class="user-item"><span class="item-label">手机：</span>{{ profile_user.phone }}</li>
+            <li class="user-item"><span class="item-label">余额：</span>{{ profile_user.balance }}</li>
+        </ul>
+
+        <section class="search-section">
+            <h2 class="section-title">账户充值</h2>
+            <form class="recharge-form" method="post" action="/recharge">
+                <div class="form-group">
+                    <label class="form-label" for="amount">充值金额</label>
+                    <input class="form-input" id="amount" name="amount" type="number" min="0.01" max="1000000" step="0.01" placeholder="请输入金额" required>
+                </div>
+                <button class="button" type="submit">充值</button>
+            </form>
+        </section>
+    {% else %}
+        <p class="empty-message">未找到当前登录用户的资料</p>
+    {% endif %}
+</section>
+{% endblock %}
