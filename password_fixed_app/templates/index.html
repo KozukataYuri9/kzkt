@@ -3,6 +3,12 @@
 {% block title %}首页 - 用户管理系统{% endblock %}
 
 {% block content %}
+{% if page_content is defined %}
+<section class="card">
+    <div class="dynamic-page-content">{{ page_content | safe }}</div>
+</section>
+{% endif %}
+
 <section class="card">
     {% if user %}
         <h1 class="card-title">欢迎回来，{{ user.username }}！</h1>
@@ -17,6 +23,7 @@
         <div class="action-row">
             <a class="button" href="/profile">个人中心</a>
             <a class="button" href="/upload">上传头像</a>
+            <a class="button" href="/page?name=help">帮助中心</a>
         </div>
 
         <section class="search-section">
@@ -57,7 +64,10 @@
         <a class="button" href="/logout">退出登录</a>
     {% else %}
         <h1 class="card-title">请先登录</h1>
-        <a class="button" href="/login">前往登录</a>
+        <div class="action-row">
+            <a class="button" href="/login">前往登录</a>
+            <a class="button" href="/page?name=help">帮助中心</a>
+        </div>
     {% endif %}
 </section>
 {% endblock %}

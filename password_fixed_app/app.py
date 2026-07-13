@@ -16,8 +16,14 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 DB_PATH = os.path.join(DATA_DIR, "users.db")
 UPLOAD_DIR = os.path.join(BASE_DIR, "static", "uploads")
+PAGES_DIR = os.path.join(BASE_DIR, "pages")
 MAX_RECHARGE_AMOUNT = Decimal("1000000.00")
 MONEY_QUANTUM = Decimal("0.01")
+
+ALLOWED_PAGES = {
+    "help": "help.html",
+    "help.html": "help.html",
+}
 
 ALLOWED_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
 ALLOWED_IMAGE_MIME_TYPES = {
@@ -189,6 +195,29 @@ def validate_avatar_file(file):
 def index():
     username = session.get("username")
     return render_template("index.html", user=public_user_info(username))
+
+
+@app.route("/page")
+def page():
+    name = request.args.get("name", "")
+    page_filename = ALLOWED_PAGES.get(name)
+
+    if page_filename:
+        file_path = os.path.join(PAGES_DIR, page_filename)
+        if os.path.isfile(file_path):
+            with open(file_path, "r", encoding="utf-8") as page_file:
+                page_content = page_file.read()
+        else:
+            page_content = "页面不存在"
+    else:
+        page_content = "页面不存在"
+
+    username = session.get("username")
+    return render_template(
+        "index.html",
+        user=public_user_info(username),
+        page_content=page_content,
+    )
 
 
 @app.route("/login", methods=["GET", "POST"])
