@@ -61,7 +61,10 @@
             {% endif %}
         </section>
 
-        <a class="button" href="/logout">退出登录</a>
+        <form class="inline-form" method="post" action="/logout">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="button" type="submit">退出登录</button>
+        </form>
     {% else %}
         <h1 class="card-title">请先登录</h1>
         <div class="action-row">

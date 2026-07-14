@@ -1,4 +1,6 @@
+import hmac
 import os
+import secrets
 import sqlite3
 import uuid
 from decimal import Decimal, InvalidOperation
@@ -9,8 +11,12 @@ from werkzeug.utils import secure_filename
 
 
 app = Flask(__name__)
-app.secret_key = "dev-key-2025"
-app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", secrets.token_hex(32))
+app.config.update(
+    MAX_CONTENT_LENGTH=16 * 1024 * 1024,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
@@ -49,6 +55,40 @@ USERS = {
         "balance": 100,
     },
 }
+
+
+def generate_csrf_token():
+    token = session.get("_csrf_token")
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session["_csrf_token"] = token
+    return token
+
+
+def rotate_csrf_token():
+    session["_csrf_token"] = secrets.token_urlsafe(32)
+    return session["_csrf_token"]
+
+
+app.jinja_env.globals["csrf_token"] = generate_csrf_token
+
+
+@app.before_request
+def validate_csrf_token():
+    if request.method != "POST":
+        return None
+
+    session_token = session.get("_csrf_token", "")
+    request_token = request.form.get("csrf_token", "") or request.headers.get(
+        "X-CSRF-Token", ""
+    )
+    if not session_token or not request_token:
+        abort(400, description="CSRF token 缺失或无效")
+
+    if not hmac.compare_digest(session_token, request_token):
+        abort(400, description="CSRF token 缺失或无效")
+
+    return None
 
 
 def get_db_connection():
@@ -140,6 +180,19 @@ def get_user_by_username(username):
     return user
 
 
+def get_auth_user_by_username(username):
+    if not username:
+        return None
+
+    conn = get_db_connection()
+    user = conn.execute(
+        "SELECT username, password FROM users WHERE username = ?",
+        (username,),
+    ).fetchone()
+    conn.close()
+    return user
+
+
 def public_user_info(username):
     user = USERS.get(username)
     db_user = get_user_by_username(username)
@@ -225,10 +278,12 @@ def login():
     if request.method == "POST":
         username = request.form.get("username", "")
         password = request.form.get("password", "")
-        user = USERS.get(username)
+        user = get_auth_user_by_username(username)
 
-        if user and check_password_hash(user["password_hash"], password):
+        if user and check_password_hash(user["password"], password):
+            session.clear()
             session["username"] = username
+            rotate_csrf_token()
             return render_template("index.html", user=public_user_info(username))
 
         return render_template("login.html", error="用户名或密码错误")
@@ -344,6 +399,64 @@ def profile():
     return render_template("profile.html", profile_user=profile_user)
 
 
+@app.route("/change-password", methods=["POST"])
+def change_password():
+    username = session.get("username")
+    if not username:
+        return redirect("/login")
+
+    current_password = request.form.get("current_password", "")
+    new_password = request.form.get("new_password", "")
+    confirm_password = request.form.get("confirm_password", "")
+    profile_user = get_user_by_username(username)
+    auth_user = get_auth_user_by_username(username)
+
+    if not profile_user or not auth_user:
+        session.clear()
+        return redirect("/login")
+
+    if not check_password_hash(auth_user["password"], current_password):
+        return (
+            render_template(
+                "profile.html",
+                profile_user=profile_user,
+                error="原密码不正确",
+            ),
+            400,
+        )
+
+    if len(new_password) < 8:
+        return (
+            render_template(
+                "profile.html",
+                profile_user=profile_user,
+                error="新密码长度至少为 8 位",
+            ),
+            400,
+        )
+
+    if new_password != confirm_password:
+        return (
+            render_template(
+                "profile.html",
+                profile_user=profile_user,
+                error="两次输入的新密码不一致",
+            ),
+            400,
+        )
+
+    conn = get_db_connection()
+    conn.execute(
+        "UPDATE users SET password = ? WHERE username = ?",
+        (generate_password_hash(new_password), username),
+    )
+    conn.commit()
+    conn.close()
+    rotate_csrf_token()
+
+    return redirect("/profile")
+
+
 @app.route("/recharge", methods=["POST"])
 def recharge():
     username = session.get("username")
@@ -393,7 +506,7 @@ def recharge():
     return redirect("/profile")
 
 
-@app.route("/logout")
+@app.route("/logout", methods=["POST"])
 def logout():
     session.clear()
     return redirect("/")

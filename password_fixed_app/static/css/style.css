@@ -45,6 +45,19 @@
     font-size: 15px;
 }
 
+.nav-form,
+.inline-form {
+    display: inline-block;
+}
+
+.nav-button {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font-family: inherit;
+    cursor: pointer;
+}
+
 .main-container {
     width: min(90%, 900px);
     margin: 48px auto;
