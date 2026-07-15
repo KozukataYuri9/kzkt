@@ -1,7 +1,12 @@
 import hmac
+import http.client
+import ipaddress
 import os
 import secrets
+import socket
+import ssl
 import sqlite3
+import urllib.parse
 import uuid
 from decimal import Decimal, InvalidOperation
 
@@ -25,6 +30,10 @@ UPLOAD_DIR = os.path.join(BASE_DIR, "static", "uploads")
 PAGES_DIR = os.path.join(BASE_DIR, "pages")
 MAX_RECHARGE_AMOUNT = Decimal("1000000.00")
 MONEY_QUANTUM = Decimal("0.01")
+ALLOWED_FETCH_SCHEMES = {"http": 80, "https": 443}
+FETCH_TIMEOUT_SECONDS = 10
+MAX_FETCH_BYTES = 20000
+MAX_FETCH_CHARACTERS = 5000
 
 ALLOWED_PAGES = {
     "help": "help.html",
@@ -76,6 +85,9 @@ app.jinja_env.globals["csrf_token"] = generate_csrf_token
 @app.before_request
 def validate_csrf_token():
     if request.method != "POST":
+        return None
+
+    if request.endpoint == "fetch_url" and not session.get("username"):
         return None
 
     session_token = session.get("_csrf_token", "")
@@ -347,6 +359,173 @@ def search():
         keyword=keyword,
         results=results,
     )
+
+
+class UnsafeFetchTarget(ValueError):
+    pass
+
+
+def read_response_preview(response):
+    raw_content = response.read(MAX_FETCH_BYTES)
+    charset = response.headers.get_content_charset() or "utf-8"
+    try:
+        return raw_content.decode(charset, errors="replace")[:MAX_FETCH_CHARACTERS]
+    except LookupError:
+        return raw_content.decode("utf-8", errors="replace")[:MAX_FETCH_CHARACTERS]
+
+
+def resolve_public_addresses(hostname, port):
+    try:
+        address_info = socket.getaddrinfo(
+            hostname,
+            port,
+            family=socket.AF_UNSPEC,
+            type=socket.SOCK_STREAM,
+        )
+    except socket.gaierror as error:
+        raise UnsafeFetchTarget("目标域名无法解析") from error
+
+    addresses = []
+    for entry in address_info:
+        address = entry[4][0]
+        try:
+            parsed_address = ipaddress.ip_address(address)
+        except ValueError as error:
+            raise UnsafeFetchTarget("目标地址无效") from error
+
+        if not parsed_address.is_global:
+            raise UnsafeFetchTarget("禁止访问内网、回环或其他非公网地址")
+        if address not in addresses:
+            addresses.append(address)
+
+    if not addresses:
+        raise UnsafeFetchTarget("目标域名没有可用的公网地址")
+    return addresses
+
+
+def validate_fetch_target(target_url):
+    try:
+        parsed = urllib.parse.urlsplit(target_url)
+    except ValueError as error:
+        raise UnsafeFetchTarget("URL 格式无效") from error
+
+    scheme = parsed.scheme.lower()
+    if scheme not in ALLOWED_FETCH_SCHEMES:
+        raise UnsafeFetchTarget("只允许使用 http:// 或 https:// URL")
+    if parsed.username is not None or parsed.password is not None:
+        raise UnsafeFetchTarget("URL 中不能包含用户名或密码")
+    if not parsed.hostname:
+        raise UnsafeFetchTarget("URL 缺少有效主机名")
+
+    try:
+        hostname = parsed.hostname.encode("idna").decode("ascii")
+        port = parsed.port or ALLOWED_FETCH_SCHEMES[scheme]
+    except (UnicodeError, ValueError) as error:
+        raise UnsafeFetchTarget("URL 主机名或端口无效") from error
+
+    lowered_hostname = hostname.rstrip(".").lower()
+    if (
+        lowered_hostname == "localhost"
+        or lowered_hostname.endswith(".localhost")
+        or lowered_hostname.endswith(".local")
+    ):
+        raise UnsafeFetchTarget("禁止访问本地主机名")
+
+    if port != ALLOWED_FETCH_SCHEMES[scheme]:
+        raise UnsafeFetchTarget("只允许访问 HTTP/HTTPS 默认端口")
+
+    addresses = resolve_public_addresses(hostname, port)
+    request_target = parsed.path or "/"
+    if parsed.query:
+        request_target = f"{request_target}?{parsed.query}"
+    return scheme, hostname, port, request_target, addresses
+
+
+def create_pinned_connection(scheme, hostname, port, address):
+    if scheme == "https":
+        connection = http.client.HTTPSConnection(
+            hostname,
+            port,
+            timeout=FETCH_TIMEOUT_SECONDS,
+            context=ssl.create_default_context(),
+        )
+    else:
+        connection = http.client.HTTPConnection(
+            hostname,
+            port,
+            timeout=FETCH_TIMEOUT_SECONDS,
+        )
+
+    def pinned_create_connection(
+        _destination,
+        timeout=socket._GLOBAL_DEFAULT_TIMEOUT,
+        source_address=None,
+        *args,
+        **kwargs,
+    ):
+        return socket.create_connection((address, port), timeout, source_address)
+
+    connection._create_connection = pinned_create_connection
+    return connection
+
+
+def secure_fetch(target_url):
+    scheme, hostname, port, request_target, addresses = validate_fetch_target(
+        target_url
+    )
+    connection = create_pinned_connection(
+        scheme,
+        hostname,
+        port,
+        addresses[0],
+    )
+    try:
+        connection.request(
+            "GET",
+            request_target,
+            headers={
+                "User-Agent": "SecureURLFetcher/1.0",
+                "Accept": "text/plain,text/html,application/json;q=0.9,*/*;q=0.1",
+            },
+        )
+        response = connection.getresponse()
+        return response.status, read_response_preview(response)
+    finally:
+        connection.close()
+
+
+@app.route("/fetch-url", methods=["POST"])
+def fetch_url():
+    username = session.get("username")
+    user = public_user_info(username)
+    if not user:
+        return redirect("/login")
+
+    target_url = request.form.get("url", "")
+    try:
+        status_code, content = secure_fetch(target_url)
+        return render_template(
+            "index.html",
+            user=user,
+            fetch_url=target_url,
+            fetch_status=status_code,
+            fetch_content=content,
+        )
+    except UnsafeFetchTarget as error:
+        return render_template(
+            "index.html",
+            user=user,
+            fetch_url=target_url,
+            fetch_error=f"抓取失败：{error}",
+        ), 400
+    except (OSError, ssl.SSLError, http.client.HTTPException, TimeoutError) as error:
+        app.logger.warning("URL fetch failed for %r: %s", target_url, error)
+        return render_template(
+            "index.html",
+            user=user,
+            fetch_url=target_url,
+            fetch_error="抓取失败：目标不可访问或响应异常",
+        ), 502
 
 
 @app.route("/upload", methods=["GET", "POST"])

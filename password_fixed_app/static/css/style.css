@@ -193,6 +193,27 @@
     flex: 0 0 auto;
 }
 
+.fetch-result {
+    margin-top: 18px;
+}
+
+.fetch-status {
+    margin-bottom: 10px;
+}
+
+.fetch-content {
+    max-height: 360px;
+    padding: 14px;
+    overflow: auto;
+    border: 1px solid #dfe3eb;
+    border-radius: 8px;
+    background: #f7f8fc;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: Consolas, monospace;
+    line-height: 1.5;
+}
+
 .recharge-form {
     display: flex;
     align-items: flex-end;

@@ -61,6 +61,26 @@
             {% endif %}
         </section>
 
+        <section class="search-section">
+            <h2 class="section-title">URL 抓取</h2>
+            <form class="search-form" method="post" action="/fetch-url">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input class="form-input search-input" name="url" type="text" value="{{ fetch_url or '' }}" placeholder="输入要抓取的 URL" required>
+                <button class="button search-button" type="submit">抓取</button>
+            </form>
+
+            {% if fetch_error %}
+                <div class="error-message fetch-result">{{ fetch_error }}</div>
+            {% endif %}
+
+            {% if fetch_status is defined %}
+                <div class="fetch-result">
+                    <p class="fetch-status"><span class="item-label">状态码：</span>{{ fetch_status }}</p>
+                    <pre class="fetch-content">{{ fetch_content }}</pre>
+                </div>
+            {% endif %}
+        </section>
+
         <form class="inline-form" method="post" action="/logout">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button class="button" type="submit">退出登录</button>
