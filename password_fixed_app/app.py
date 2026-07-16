@@ -2,10 +2,12 @@ import hmac
 import http.client
 import ipaddress
 import os
+import platform
 import secrets
 import socket
 import ssl
 import sqlite3
+import subprocess
 import urllib.parse
 import uuid
 from decimal import Decimal, InvalidOperation
@@ -526,6 +528,62 @@ def fetch_url():
             fetch_url=target_url,
             fetch_error="抓取失败：目标不可访问或响应异常",
         ), 502
+
+
+@app.route("/ping", methods=["GET", "POST"])
+def ping():
+    if not session.get("username"):
+        return redirect("/login")
+
+    if request.method == "GET":
+        return render_template("ping.html")
+
+    ip_value = request.form.get("ip", "").strip()
+    try:
+        target_ip = str(ipaddress.ip_address(ip_value))
+    except ValueError:
+        return render_template(
+            "ping.html",
+            ip=ip_value,
+            error="请输入有效的 IPv4 或 IPv6 地址",
+        ), 400
+
+    count_option = "-n" if platform.system() == "Windows" else "-c"
+    command = ["ping", count_option, "3", target_ip]
+    try:
+        output = subprocess.check_output(
+            command,
+            stderr=subprocess.STDOUT,
+            shell=False,
+            timeout=30,
+            text=True,
+            errors="replace",
+        )
+        return render_template("ping.html", ip=target_ip, output=output)
+    except subprocess.CalledProcessError as error:
+        return render_template(
+            "ping.html",
+            ip=target_ip,
+            output=error.output or "Ping 执行失败",
+            error="目标不可达或 Ping 命令执行失败",
+        )
+    except subprocess.TimeoutExpired as error:
+        timeout_output = error.output or ""
+        if isinstance(timeout_output, bytes):
+            timeout_output = timeout_output.decode(errors="replace")
+        return render_template(
+            "ping.html",
+            ip=target_ip,
+            output=timeout_output,
+            error="Ping 执行超时",
+        ), 504
+    except OSError:
+        app.logger.exception("Unable to start the ping command")
+        return render_template(
+            "ping.html",
+            ip=target_ip,
+            error="服务器无法启动 Ping 命令",
+        ), 500
 
 
 @app.route("/upload", methods=["GET", "POST"])

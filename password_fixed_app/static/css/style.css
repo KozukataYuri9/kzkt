@@ -214,6 +214,22 @@
     line-height: 1.5;
 }
 
+.console-output {
+    min-height: 180px;
+    max-height: 440px;
+    margin-top: 18px;
+    padding: 18px;
+    overflow: auto;
+    border: 1px solid #202820;
+    border-radius: 8px;
+    background: #090d09;
+    color: #5cff72;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-family: Consolas, "Courier New", monospace;
+    line-height: 1.55;
+}
+
 .recharge-form {
     display: flex;
     align-items: flex-end;
