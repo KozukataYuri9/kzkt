@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}XML导入 - 用户管理系统{% endblock %}
+
+{% block content %}
+<section class="card">
+    <h1 class="card-title">XML 数据导入</h1>
+    <form class="form" method="post" action="/xml-import">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-group">
+            <label class="form-label" for="xml_data">XML 数据</label>
+            <textarea class="form-input form-textarea" id="xml_data" name="xml_data" placeholder="&lt;users&gt;&#10;  &lt;user&gt;&lt;name&gt;Alice&lt;/name&gt;&lt;email&gt;alice@example.com&lt;/email&gt;&lt;/user&gt;&#10;&lt;/users&gt;" required>{{ xml_data or '' }}</textarea>
+        </div>
+        <button class="button" type="submit">导入</button>
+    </form>
+
+    {% if error %}
+        <div class="error-message">{{ error }}</div>
+    {% endif %}
+
+    {% if result is defined %}
+        <pre class="json-output">{{ result }}</pre>
+    {% endif %}
+</section>
+{% endblock %}

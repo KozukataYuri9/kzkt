@@ -230,6 +230,26 @@
     line-height: 1.55;
 }
 
+.form-textarea {
+    min-height: 240px;
+    resize: vertical;
+    font-family: Consolas, "Courier New", monospace;
+    line-height: 1.5;
+}
+
+.json-output {
+    margin-top: 18px;
+    padding: 18px;
+    overflow: auto;
+    border: 1px solid #dfe3eb;
+    border-radius: 8px;
+    background: #f7f8fc;
+    color: #273142;
+    white-space: pre-wrap;
+    font-family: Consolas, "Courier New", monospace;
+    line-height: 1.55;
+}
+
 .recharge-form {
     display: flex;
     align-items: flex-end;

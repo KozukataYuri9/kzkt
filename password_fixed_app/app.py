@@ -1,8 +1,10 @@
 import hmac
 import http.client
 import ipaddress
+import json
 import os
 import platform
+import re
 import secrets
 import socket
 import ssl
@@ -10,6 +12,7 @@ import sqlite3
 import subprocess
 import urllib.parse
 import uuid
+import xml.etree.ElementTree as ET
 from decimal import Decimal, InvalidOperation
 
 from flask import Flask, abort, render_template, request, redirect, session, url_for
@@ -36,6 +39,7 @@ ALLOWED_FETCH_SCHEMES = {"http": 80, "https": 443}
 FETCH_TIMEOUT_SECONDS = 10
 MAX_FETCH_BYTES = 20000
 MAX_FETCH_CHARACTERS = 5000
+MAX_XML_IMPORT_CHARACTERS = 100000
 
 ALLOWED_PAGES = {
     "help": "help.html",
@@ -584,6 +588,84 @@ def ping():
             ip=target_ip,
             error="服务器无法启动 Ping 命令",
         ), 500
+
+
+def local_xml_name(tag):
+    return tag.rsplit("}", 1)[-1] if "}" in tag else tag
+
+
+def xml_child_text(node, child_name):
+    for child in node:
+        if local_xml_name(child.tag) == child_name:
+            return (child.text or "").strip()
+    return ""
+
+
+@app.route("/xml-import", methods=["GET", "POST"])
+def xml_import():
+    if not session.get("username"):
+        return redirect("/login")
+
+    if request.method == "GET":
+        return render_template("xml_import.html")
+
+    xml_data = request.form.get("xml_data", "")
+    if not xml_data.strip():
+        return render_template(
+            "xml_import.html",
+            xml_data=xml_data,
+            error="请输入 XML 数据",
+        ), 400
+    if len(xml_data) > MAX_XML_IMPORT_CHARACTERS:
+        return render_template(
+            "xml_import.html",
+            error="XML 数据过大",
+        ), 413
+
+    dangerous_declaration = re.search(
+        r"<!\s*(?:DOCTYPE|ENTITY)\b|\b(?:SYSTEM|PUBLIC)\b",
+        xml_data,
+        re.IGNORECASE,
+    )
+    if dangerous_declaration:
+        return render_template(
+            "xml_import.html",
+            xml_data=xml_data,
+            error="禁止使用 DTD、实体或外部资源声明",
+        ), 400
+
+    try:
+        root = ET.fromstring(xml_data)
+    except ET.ParseError as error:
+        return render_template(
+            "xml_import.html",
+            xml_data=xml_data,
+            error=f"XML 解析失败：{error}",
+        ), 400
+
+    users = []
+    for node in root.iter():
+        if local_xml_name(node.tag) != "user":
+            continue
+        users.append(
+            {
+                "name": (node.get("name") or xml_child_text(node, "name")).strip(),
+                "email": (
+                    node.get("email") or xml_child_text(node, "email")
+                ).strip(),
+            }
+        )
+
+    result = json.dumps(
+        {"count": len(users), "users": users},
+        ensure_ascii=False,
+        indent=2,
+    )
+    return render_template(
+        "xml_import.html",
+        xml_data=xml_data,
+        result=result,
+    )
 
 
 @app.route("/upload", methods=["GET", "POST"])
